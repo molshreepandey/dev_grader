@@ -33,19 +33,48 @@ impl Default for Limits {
     }
 }
 
-/// A single sandboxed run: install + test a merged project inside a per-stack rootfs.
+impl Limits {
+    /// The install phase. A cold `mvn dependency:go-offline` or `bun install` is dominated by
+    /// network round-trips, so it gets a much longer wall clock than the tests — and it is our
+    /// command, not the student's, so a generous budget is not an attack surface.
+    pub fn install() -> Self {
+        Limits {
+            wall_time_ms: 300_000,
+            cpu_time_s: 300,
+            ..Limits::default()
+        }
+    }
+
+    /// The test phase: untrusted code, offline, on a tight budget.
+    pub fn test() -> Self {
+        Limits::default()
+    }
+}
+
+/// A single sandboxed run: **one** phase (install or test) over a merged project, inside a
+/// per-stack rootfs. The two phases share `work_dir` and `home_dir`, so whatever the install
+/// downloads is still there when the tests run.
 #[derive(Debug)]
 pub struct ProjectSandboxConfig {
-    /// Stable id (submission id) used to name the cgroup.
+    /// Stable id (submission id + phase) used to name the cgroup.
     pub id: String,
     /// Empty, writable directory used to assemble the mount-namespace root.
     pub root_dir: PathBuf,
-    /// Baked, read-only per-stack rootfs (toolchain + warmed dependency caches).
+    /// Read-only per-stack rootfs (the toolchain: python+pip, bun, jdk+maven).
     pub rootfs: PathBuf,
     /// The merged project (student code + hidden tests); bind-mounted read-write at `/work`.
     pub work_dir: PathBuf,
+    /// Per-submission home; bind-mounted read-write at [`HOME_MOUNT`]. This is where pip, bun and
+    /// maven put their caches — none of them can run with a read-only `$HOME`.
+    pub home_dir: PathBuf,
     /// Command to run, already wrapped as a shell invocation (see [`build_shell_command`]).
     pub argv: Vec<String>,
+    /// Whether the run may reach the network.
+    ///
+    /// `true` only for the **install** phase, where the whole point is to download dependencies:
+    /// the run then shares the host's network namespace. `false` for the **test** phase, which
+    /// gets an empty network namespace — untrusted student code never has a route out.
+    pub network: bool,
     pub limits: Limits,
     /// Captured stdout of the run.
     pub stdout_file: File,
@@ -65,16 +94,18 @@ pub struct SandboxOutcome {
 
 /// The working directory, inside the sandbox, where the merged project is mounted.
 pub const WORK_MOUNT: &str = "/work";
+/// `$HOME` inside the sandbox — writable, and shared by both phases so a dependency cache the
+/// install populates is still warm for the tests.
+pub const HOME_MOUNT: &str = "/home/grader";
 
-/// Build the shell command that installs (if any) then runs the tests, from `/work`.
-/// Steps are `&&`-chained so a failed install short-circuits before the test step.
-pub fn build_shell_command(install: &[String], test: &[String]) -> Vec<String> {
-    let mut steps = vec![format!("cd {}", shell_quote(WORK_MOUNT))];
-    if !install.is_empty() {
-        steps.push(join_argv(install));
-    }
-    steps.push(join_argv(test));
-    vec!["/bin/sh".into(), "-c".into(), steps.join(" && ")]
+/// Wrap one phase's argv as a shell invocation rooted at `/work`.
+///
+/// Install and test are run as separate sandboxes (only the first gets a network), so this builds
+/// exactly one of them. Every argument is shell-quoted: a filename with a space — or a `;` — in it
+/// cannot become a second command.
+pub fn build_shell_command(argv: &[String]) -> Vec<String> {
+    let command = format!("cd {} && {}", shell_quote(WORK_MOUNT), join_argv(argv));
+    vec!["/bin/sh".into(), "-c".into(), command]
 }
 
 fn join_argv(argv: &[String]) -> String {
@@ -108,23 +139,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shell_command_chains_install_then_test_from_work() {
-        let cmd = build_shell_command(
-            &["pip".into(), "install".into(), "-r".into(), "requirements.txt".into()],
-            &["pytest".into(), "--junitxml=report.xml".into()],
-        );
+    fn shell_command_runs_one_phase_from_work() {
+        let cmd = build_shell_command(&[
+            "pip".into(),
+            "install".into(),
+            "-r".into(),
+            "requirements.txt".into(),
+        ]);
         assert_eq!(cmd[0], "/bin/sh");
         assert_eq!(cmd[1], "-c");
-        assert_eq!(
-            cmd[2],
-            "cd /work && pip install -r requirements.txt && pytest --junitxml=report.xml"
-        );
+        assert_eq!(cmd[2], "cd /work && pip install -r requirements.txt");
     }
 
     #[test]
-    fn shell_command_without_install_is_just_the_test() {
-        let cmd = build_shell_command(&[], &["mvn".into(), "-o".into(), "test".into()]);
-        assert_eq!(cmd[2], "cd /work && mvn -o test");
+    fn a_multi_word_step_is_quoted_as_one_argument() {
+        // The `sh -c "…"` form an install step often needs must survive as a single argv entry.
+        let cmd = build_shell_command(&[
+            "/bin/sh".into(),
+            "-c".into(),
+            "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt".into(),
+        ]);
+        assert_eq!(
+            cmd[2],
+            "cd /work && /bin/sh -c 'python3 -m venv .venv && .venv/bin/pip install -r requirements.txt'"
+        );
     }
 
     #[test]

@@ -9,6 +9,11 @@ license.workspace = true
 name = "grader"
 path = "src/main.rs"
 
+# Dev/ops tool: grade a directory on disk (no Kafka, no GitHub). Used to smoke-test assignments.
+[[bin]]
+name = "grade-local"
+path = "src/bin/grade-local.rs"
+
 [dependencies]
 grader-types = { workspace = true }
 grader-engine = { path = "../../crates/grader-engine" }

@@ -3,19 +3,29 @@ use serde::{Deserialize, Serialize};
 use crate::report::TestReport;
 
 /// Terminal state of a grading run — the payload the worker produces back.
+///
+/// The variants track the pipeline's stages, so a student-facing message can say *which* step
+/// let them down: fetch → merge → install → test.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum GradeStatus {
     /// Tests ran to completion (some may have failed — that's still a successful grade).
     Graded,
-    /// Student code failed to install/compile, so no tests could run.
-    BuildError,
     /// Submission could not be fetched (bad URL, private repo, network).
     FetchError,
+    /// The submission does not have the shape the assignment requires, so no gradable workspace
+    /// could be built (a required solution file is missing, a path is a symlink, …).
+    MergeError,
+    /// Dependency installation failed — the manifest is broken, a package does not exist, or the
+    /// registry was unreachable. This is the one stage with network access.
+    InstallError,
+    /// Dependencies installed, but the tests never produced a report: the code did not compile,
+    /// the suite could not be collected, or the run was OOM-killed.
+    BuildError,
+    /// The run exceeded its wall-clock/CPU budget (in either phase).
+    Timeout,
     /// Sandbox/infrastructure failure — not the student's fault; safe to retry.
     InternalError,
-    /// The run exceeded its wall-clock/CPU budget.
-    Timeout,
 }
 
 /// The graded outcome returned for a submission.

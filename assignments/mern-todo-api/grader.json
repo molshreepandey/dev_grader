@@ -1,0 +1,10 @@
+{
+  "stack": "javascript",
+  "merge": {
+    "mode": "whole_project",
+    "protected_paths": ["tests", "package.json"]
+  },
+  "install": ["bun", "install"],
+  "test": ["bun", "test", "tests", "--reporter=junit", "--reporter-outfile=report.xml"],
+  "report": { "file": "report.xml" }
+}

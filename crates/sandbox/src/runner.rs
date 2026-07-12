@@ -3,9 +3,15 @@
 //! is bind-mounted **read-write** at `/work` (the cwd), the tmpfs/limits are sized up, and the
 //! extended seccomp profile is applied.
 //!
-//! Isolation, unchanged from IronJudge: a rootless user namespace plus PID/NET/IPC/UTS/mount
-//! namespaces (so the run has **no network**), a pivot into the assembled rootfs, cgroup v2
-//! limits, `RLIMIT_CPU`/`RLIMIT_FSIZE`, `NO_NEW_PRIVS`, and seccomp.
+//! Isolation, as in IronJudge: a rootless user namespace plus PID/IPC/UTS/mount namespaces, a
+//! pivot into the assembled rootfs, cgroup v2 limits, `RLIMIT_CPU`/`RLIMIT_FSIZE`, `NO_NEW_PRIVS`,
+//! and seccomp.
+//!
+//! The one deliberate difference: **the network namespace is conditional**. Dependencies cannot be
+//! baked ahead of time — every project declares its own — so the *install* phase runs with the
+//! host's network namespace and downloads them, while the *test* phase, which is the one that
+//! executes untrusted student code, gets an empty network namespace and can reach nothing. Both
+//! phases share `/work` and `$HOME`, so the packages the install fetched are there for the tests.
 //!
 //! # Runtime requirements (cannot be exercised without them)
 //! Requires the ability to create user namespaces and a baked rootfs at `config.rootfs`
@@ -25,15 +31,20 @@ use crate::config::{ProjectSandboxConfig, SandboxOutcome};
 use crate::error::SandboxError;
 use crate::seccomp::build_project_seccomp_profile;
 
-/// Read-only system directories bind-mounted from the rootfs (the toolchain + baked caches).
+/// Read-only system directories bind-mounted from the rootfs (the toolchain).
 const RO_DIRS: &[&str] = &["/bin", "/sbin", "/lib", "/lib64", "/usr", "/etc", "/opt", "/home"];
 /// Device files exposed inside the sandbox.
 const DEV_FILES: &[&str] = &["/dev/null", "/dev/urandom", "/dev/zero"];
 const PATH_ENV: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-/// HOME inside the sandbox; baked dependency caches (`~/.m2`, `~/.bun`) live under here.
+/// HOME inside the sandbox. `/home` comes from the rootfs read-only, so the per-submission home is
+/// bind-mounted read-write *over* this path — pip, bun and maven all insist on writing a cache
+/// under $HOME.
 const SANDBOX_HOME: &str = "/home/grader";
+/// Resolver config bind-mounted from the host when the run is allowed online. Without it, the
+/// install phase can open sockets but cannot resolve a registry hostname.
+const NET_FILES: &[&str] = &["/etc/resolv.conf", "/etc/hosts"];
 
-/// Run one install+test command inside the sandbox and return its outcome.
+/// Run one phase (install or test) inside the sandbox and return its outcome.
 pub fn run_project_sandbox(config: ProjectSandboxConfig) -> Result<SandboxOutcome, SandboxError> {
     let start = Instant::now();
     let cgroup = Cgroup::create(&config.id, &config.limits)?;
@@ -47,6 +58,7 @@ pub fn run_project_sandbox(config: ProjectSandboxConfig) -> Result<SandboxOutcom
     for dir in RO_DIRS {
         std::fs::create_dir_all(root.join(dir.trim_start_matches('/'))).map_err(prep)?;
     }
+    std::fs::create_dir_all(root.join(SANDBOX_HOME.trim_start_matches('/'))).map_err(prep)?;
     // Bind targets for device files.
     for dev in DEV_FILES {
         let target = root.join(dev.trim_start_matches('/'));
@@ -70,10 +82,24 @@ pub fn run_project_sandbox(config: ProjectSandboxConfig) -> Result<SandboxOutcom
             dev_mounts.push((cstr(dev), cstr(root.join(dev.trim_start_matches('/')).to_str().unwrap())));
         }
     }
+    // The host's resolver config, stamped over the rootfs's own copy *after* /etc is mounted, so
+    // it wins. Only for the online phase: an offline run has no interface to resolve for. The
+    // target must already exist inside the rootfs's /etc — the image creates it.
+    let mut net_mounts: Vec<(CString, CString)> = Vec::new();
+    if config.network {
+        for file in NET_FILES {
+            let rel = file.trim_start_matches('/');
+            if std::path::Path::new(file).exists() && config.rootfs.join(rel).exists() {
+                net_mounts.push((cstr(file), cstr(root.join(rel).to_str().unwrap())));
+            }
+        }
+    }
 
     let root_c = cstr(root.to_str().unwrap());
     let work_src_c = cstr(config.work_dir.to_str().unwrap());
     let work_tgt_c = cstr(root.join("work").to_str().unwrap());
+    let home_src_c = cstr(config.home_dir.to_str().unwrap());
+    let home_tgt_c = cstr(root.join(SANDBOX_HOME.trim_start_matches('/')).to_str().unwrap());
     let proc_tgt_c = cstr(root.join("proc").to_str().unwrap());
     let tmp_tgt_c = cstr(root.join("tmp").to_str().unwrap());
     let shm_tgt_c = cstr(root.join("dev/shm").to_str().unwrap());
@@ -91,6 +117,7 @@ pub fn run_project_sandbox(config: ProjectSandboxConfig) -> Result<SandboxOutcom
     let shm_opts = cstr("size=64m,mode=1777");
     let cpu_time_s = config.limits.cpu_time_s;
     let fsize = config.limits.fsize_bytes;
+    let network = config.network;
     let bpf = build_project_seccomp_profile();
 
     let (exe, args) = config.argv.split_first().ok_or_else(|| prep_msg("empty argv"))?;
@@ -110,12 +137,16 @@ pub fn run_project_sandbox(config: ProjectSandboxConfig) -> Result<SandboxOutcom
             if !write_all(&procs_file_c, format!("{}\n", libc::getpid()).as_bytes()) {
                 libc::_exit(101);
             }
-            let flags = CloneFlags::CLONE_NEWPID
+            // The install phase keeps the host's network namespace — that is the only way a
+            // registry can be reached. The test phase gets an empty one: no interface, no route.
+            let mut flags = CloneFlags::CLONE_NEWPID
                 | CloneFlags::CLONE_NEWIPC
-                | CloneFlags::CLONE_NEWNET
                 | CloneFlags::CLONE_NEWUTS
                 | CloneFlags::CLONE_NEWNS
                 | CloneFlags::CLONE_NEWUSER;
+            if !network {
+                flags |= CloneFlags::CLONE_NEWNET;
+            }
             if unshare(flags).is_err() {
                 libc::_exit(102);
             }
@@ -171,12 +202,29 @@ pub fn run_project_sandbox(config: ProjectSandboxConfig) -> Result<SandboxOutcom
             }
 
             // Writable project at /work (nosuid,nodev but read-write).
+            let rw = libc::MS_BIND | libc::MS_REMOUNT | libc::MS_NOSUID | libc::MS_NODEV;
             if libc::mount(work_src_c.as_ptr(), work_tgt_c.as_ptr(), c"bind".as_ptr(), libc::MS_BIND | libc::MS_REC, std::ptr::null()) != 0 {
                 libc::_exit(109);
             }
-            let rw = libc::MS_BIND | libc::MS_REMOUNT | libc::MS_NOSUID | libc::MS_NODEV;
             if libc::mount(std::ptr::null(), work_tgt_c.as_ptr(), std::ptr::null(), rw, std::ptr::null()) != 0 {
                 libc::_exit(110);
+            }
+
+            // Writable $HOME, stamped over the rootfs's read-only /home: pip, bun and maven all
+            // write a cache there, and the install phase leaves it warm for the tests.
+            if libc::mount(home_src_c.as_ptr(), home_tgt_c.as_ptr(), c"bind".as_ptr(), libc::MS_BIND | libc::MS_REC, std::ptr::null()) != 0 {
+                libc::_exit(122);
+            }
+            if libc::mount(std::ptr::null(), home_tgt_c.as_ptr(), std::ptr::null(), rw, std::ptr::null()) != 0 {
+                libc::_exit(123);
+            }
+
+            // The host's /etc/resolv.conf and /etc/hosts, so the online phase can resolve a
+            // registry hostname. Empty when the phase is offline.
+            for (src, tgt) in &net_mounts {
+                if libc::mount(src.as_ptr(), tgt.as_ptr(), c"bind".as_ptr(), libc::MS_BIND, std::ptr::null()) != 0 {
+                    libc::_exit(124);
+                }
             }
 
             for (src, tgt) in &dev_mounts {

@@ -2,13 +2,15 @@
 //!
 //! These are the real, side-effecting wirings used by the worker. The pipeline logic itself is
 //! tested against fakes in [`crate::pipeline`]; the sandbox-backed runner additionally needs
-//! root-equivalent namespace privileges and a baked rootfs at run time.
+//! root-equivalent namespace privileges and a per-stack rootfs (the toolchain) at run time.
 
 use std::path::{Path, PathBuf};
 
 use grader_types::StackConfig;
 
-use crate::ports::{Assignment, AssignmentStore, EngineError, ProjectRunner, RepoFetcher, RunOutcome};
+use crate::ports::{
+    Assignment, AssignmentStore, EngineError, Phase, ProjectRunner, RepoFetcher, RunOutcome,
+};
 
 /// Assignments laid out on disk as `<root>/<assignment_id>/{grader.json, template/}`.
 pub struct FsAssignmentStore {
@@ -75,19 +77,22 @@ impl RepoFetcher for HttpRepoFetcher {
 /// `<rootfs_base>/<stack>` (e.g. `/opt/sandbox_rootfs/python`).
 pub struct SandboxProjectRunner {
     rootfs_base: PathBuf,
-    limits: sandbox::Limits,
+    install_limits: sandbox::Limits,
+    test_limits: sandbox::Limits,
 }
 
 impl SandboxProjectRunner {
     pub fn new(rootfs_base: impl Into<PathBuf>) -> Self {
         SandboxProjectRunner {
             rootfs_base: rootfs_base.into(),
-            limits: sandbox::Limits::default(),
+            install_limits: sandbox::Limits::install(),
+            test_limits: sandbox::Limits::test(),
         }
     }
 
-    pub fn with_limits(mut self, limits: sandbox::Limits) -> Self {
-        self.limits = limits;
+    pub fn with_limits(mut self, install: sandbox::Limits, test: sandbox::Limits) -> Self {
+        self.install_limits = install;
+        self.test_limits = test;
         self
     }
 }
@@ -96,12 +101,17 @@ impl ProjectRunner for SandboxProjectRunner {
     fn run(
         &self,
         submission_id: &str,
+        phase: Phase,
         work_dir: &Path,
+        home_dir: &Path,
         config: &StackConfig,
     ) -> Result<RunOutcome, EngineError> {
-        let argv = sandbox::build_shell_command(&config.install, &config.test);
+        let argv = match phase {
+            Phase::Install => sandbox::build_shell_command(&config.install),
+            Phase::Test => sandbox::build_shell_command(&config.test),
+        };
 
-        // The mount-namespace root is assembled in a sibling temp dir.
+        // The mount-namespace root is assembled in a sibling temp dir, fresh for each phase.
         let root_dir = tempfile::Builder::new()
             .prefix("sbroot")
             .tempdir_in(work_dir.parent().unwrap_or(work_dir))
@@ -115,12 +125,18 @@ impl ProjectRunner for SandboxProjectRunner {
             std::fs::File::create(&stderr_path).map_err(|e| EngineError::new(e.to_string()))?;
 
         let cfg = sandbox::ProjectSandboxConfig {
-            id: submission_id.to_string(),
+            // One cgroup per phase — they run one after the other, so the names must differ.
+            id: format!("{submission_id}_{}", phase.as_str()),
             root_dir: root_dir.path().to_path_buf(),
             rootfs: self.rootfs_base.join(config.stack.as_str()),
             work_dir: work_dir.to_path_buf(),
+            home_dir: home_dir.to_path_buf(),
             argv,
-            limits: self.limits,
+            network: phase.network(),
+            limits: match phase {
+                Phase::Install => self.install_limits,
+                Phase::Test => self.test_limits,
+            },
             stdout_file,
             stderr_file,
         };
@@ -128,11 +144,16 @@ impl ProjectRunner for SandboxProjectRunner {
         let outcome =
             sandbox::run_project_sandbox(cfg).map_err(|e| EngineError::new(e.to_string()))?;
 
+        // On a failing install, the useful diagnostic (pip's resolver, npm's 404) is often on
+        // stdout, not stderr — so show both, stderr last.
+        let mut tail = read_tail(&stdout_path, 2048);
+        tail.push_str(&read_tail(&stderr_path, 4096));
+
         Ok(RunOutcome {
             exit_code: outcome.exit_code,
             timed_out: outcome.timed_out,
             is_oom: outcome.is_oom,
-            stderr_tail: read_tail(&stderr_path, 4096),
+            stderr_tail: tail,
         })
     }
 }

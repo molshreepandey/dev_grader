@@ -23,22 +23,57 @@ pub trait RepoFetcher {
     fn fetch(&self, repo_url: &str, git_ref: Option<&str>, dest: &Path) -> Result<(), EngineError>;
 }
 
-/// Outcome of running install+test over a merged workspace.
+/// Which half of the run this is. The two differ in exactly two ways — network access and time
+/// budget — and everything else about the sandbox is identical.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    /// Download dependencies. **Online**, generous budget. Runs our command over the project's
+    /// manifest; a non-zero exit is the student's broken manifest, not their broken code.
+    Install,
+    /// Run the hidden tests. **Offline**, tight budget. This is the phase that executes untrusted
+    /// student code.
+    Test,
+}
+
+impl Phase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Phase::Install => "install",
+            Phase::Test => "test",
+        }
+    }
+
+    /// Only the install phase may reach the network.
+    pub fn network(self) -> bool {
+        self == Phase::Install
+    }
+}
+
+/// Outcome of one sandboxed phase.
 #[derive(Debug, Clone, Default)]
 pub struct RunOutcome {
     pub exit_code: i32,
     pub timed_out: bool,
     pub is_oom: bool,
-    /// Tail of stderr, surfaced when no report was produced (build/install failure).
+    /// Tail of stderr — the student-facing diagnostic when a phase fails.
     pub stderr_tail: String,
 }
 
-/// Run the stack's install+test command over `work_dir`, leaving the JUnit report in `work_dir`.
+impl RunOutcome {
+    pub fn failed(&self) -> bool {
+        self.exit_code != 0
+    }
+}
+
+/// Run one phase of the stack's recipe over `work_dir`, with `home_dir` as a writable `$HOME`
+/// shared across phases (dependency caches live there).
 pub trait ProjectRunner {
     fn run(
         &self,
         submission_id: &str,
+        phase: Phase,
         work_dir: &Path,
+        home_dir: &Path,
         config: &StackConfig,
     ) -> Result<RunOutcome, EngineError>;
 }

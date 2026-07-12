@@ -16,8 +16,8 @@ mod seccomp;
 
 pub use cgroup::{Cgroup, initialize_global_cgroups_once};
 pub use config::{
-    Limits, ProjectSandboxConfig, SandboxOutcome, WORK_MOUNT, build_shell_command, cpu_max_line,
-    shell_quote,
+    HOME_MOUNT, Limits, ProjectSandboxConfig, SandboxOutcome, WORK_MOUNT, build_shell_command,
+    cpu_max_line, shell_quote,
 };
 pub use error::SandboxError;
 pub use runner::run_project_sandbox;

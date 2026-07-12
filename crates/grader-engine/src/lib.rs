@@ -11,5 +11,5 @@ mod ports;
 pub use adapters::{FsAssignmentStore, HttpRepoFetcher, SandboxProjectRunner};
 pub use pipeline::Engine;
 pub use ports::{
-    Assignment, AssignmentStore, EngineError, ProjectRunner, RepoFetcher, RunOutcome,
+    Assignment, AssignmentStore, EngineError, Phase, ProjectRunner, RepoFetcher, RunOutcome,
 };
