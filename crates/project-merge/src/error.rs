@@ -15,6 +15,11 @@ pub enum MergeError {
     #[error("solution path `{0}` is not a regular file")]
     NotAFile(String),
 
+    /// A template-side protected path (hidden tests / build config) is missing from the
+    /// template. This is an assignment authoring bug, not a student problem.
+    #[error("template is missing protected path `{0}`")]
+    ProtectedPathMissing(String),
+
     #[error("io error at {path}: {source}")]
     Io {
         path: PathBuf,

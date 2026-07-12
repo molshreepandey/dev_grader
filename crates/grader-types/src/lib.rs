@@ -13,7 +13,7 @@ mod result;
 mod stack;
 mod submission;
 
-pub use config::{ReportLocation, StackConfig};
+pub use config::{MergeMode, ReportLocation, StackConfig};
 pub use report::{CaseStatus, TestCase, TestReport};
 pub use result::{GradeResult, GradeStatus};
 pub use stack::Stack;

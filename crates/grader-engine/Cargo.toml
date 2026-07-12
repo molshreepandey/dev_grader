@@ -1,0 +1,18 @@
+[package]
+name = "grader-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+grader-types = { workspace = true }
+report-parser = { workspace = true }
+project-merge = { path = "../project-merge" }
+fetcher = { path = "../fetcher" }
+sandbox = { path = "../sandbox" }
+serde_json = { workspace = true }
+glob = "0.3"
+tempfile = "3"
+thiserror = { workspace = true }
+tracing = "0.1"

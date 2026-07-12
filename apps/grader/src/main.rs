@@ -1,0 +1,19 @@
+//! `grader` — the Kafka worker binary.
+//!
+//! Consumes `Submission` events, grades each one in the sandbox, and produces `GradeResult`.
+//! Configuration comes from the environment (see [`config::WorkerConfig`]).
+
+mod config;
+mod worker;
+
+use tracing_subscriber::EnvFilter;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .init();
+
+    let cfg = config::WorkerConfig::from_env();
+    worker::run(cfg).await
+}

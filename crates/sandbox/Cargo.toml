@@ -1,13 +1,13 @@
 [package]
-name = "project-merge"
+name = "sandbox"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-grader-types = { workspace = true }
+libc = "0.2"
+nix = { version = "0.31", features = ["sched"] }
+seccompiler = "0.5"
 thiserror = { workspace = true }
-
-[dev-dependencies]
-tempfile = "3"
+tracing = "0.1"

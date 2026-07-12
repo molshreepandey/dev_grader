@@ -1,0 +1,21 @@
+[package]
+name = "grader"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "grader"
+path = "src/main.rs"
+
+[dependencies]
+grader-types = { workspace = true }
+grader-engine = { path = "../../crates/grader-engine" }
+# librdkafka built from source via configure+make (no cmake / ssl to keep the native build light).
+rdkafka = { version = "0.39", default-features = false, features = ["tokio", "libz"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal"] }
+serde_json = { workspace = true }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = { workspace = true }
