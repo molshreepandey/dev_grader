@@ -1,25 +1,26 @@
 [workspace]
-resolver = "3"
-members = ["crates/*", "apps/*"]
+resolver="3"
+members=["app/grader", "crates/grader_lib", "crates/kafka_types", "crates/task_types"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
-license = "MIT"
 
 [workspace.dependencies]
-# Internal crates
-grader-types = { path = "crates/grader-types" }
-report-parser = { path = "crates/report-parser" }
+rdkafka = "0.39.0"
+tokio = { version = "1.49.0", features = ["full"] }
+tracing = "0.1.44"
+anyhow = "1.0.102"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+serde_json = "1.0.150"
+serde = { version = "1.0.228", features = ["derive"] }
+libc = "0.2.182"
+nix = { version = "0.31.2", features = ["sched"] }
+uuid = { version = "1.21.0", features = ["v4"] }
+quick-xml = "0.38.4"
 
-# External
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-quick-xml = "0.37"
-anyhow = "1"
-thiserror = "2"
 
-[profile.release]
-lto = "thin"
-codegen-units = 1
+#internal crates
+kafka_types = { version = "0.1.0", path = "crates/kafka_types" }
+task_types = { version = "0.1.0", path = "crates/task_types" }
+grader_lib = { version = "0.1.0", path = "crates/grader_lib" }

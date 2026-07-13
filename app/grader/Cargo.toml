@@ -1,0 +1,15 @@
+[package]
+name = "grader"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+grader_lib.workspace = true
+kafka_types.workspace = true
+rdkafka.workspace = true
+serde_json.workspace = true
+task_types.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
