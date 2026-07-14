@@ -1,8 +1,3 @@
-//! `grader` — the Kafka worker binary.
-//!
-//! Consumes `Submission` events, grades each one in the sandbox, and produces `GradeResult`.
-//! Configuration comes from the environment (see [`config::WorkerConfig`]).
-
 mod config;
 mod worker;
 

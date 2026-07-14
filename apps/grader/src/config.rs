@@ -22,9 +22,7 @@ impl WorkerConfig {
     pub fn from_env() -> Self {
         let get = |key: &str, default: &str| std::env::var(key).unwrap_or_else(|_| default.to_string());
         WorkerConfig {
-            // The LamiCons broker. Still overridable with KAFKA_BROKERS, so a laptop can point at
-            // `docker compose --profile local`'s throwaway Kafka.
-            brokers: get("KAFKA_BROKERS", "62.171.180.143:29092"),
+            brokers: get("KAFKA_BROKERS", "kafka:29092"),
             group_id: get("KAFKA_GROUP_ID", "grader-workers"),
             submission_topic: get("SUBMISSION_TOPIC", "assignment-submission"),
             result_topic: get("RESULT_TOPIC", "assignment-result"),
