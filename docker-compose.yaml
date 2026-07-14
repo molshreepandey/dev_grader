@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  dev-engine:
+    image: viratubuntu/lamicons-dev-engine:latest
+    container_name: lamicons-dev-engine
+    
+    # System privileges and security overrides
+    cgroup: host
+    cap_add:
+      - SYS_ADMIN
+      - MAC_ADMIN
+      - SYS_PTRACE
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+      - systempaths=unconfined
+
+    # Environment variables
+    environment:
+      KAFKA_BROKERS: ${KAFKA}:29092
+      SUBMISSION_TOPIC: grader-submission
+      RESULT_TOPIC: grader-result
+      GRADER_CONCURRENCY: 1
+      GRADER_MEMORY_MB: 4096
+      GRADER_CPU_LIMIT: 3
+      RUST_LOG: info
+
+    # Volume mounts
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - grader-data:/var/lib/grader
+
+    restart: unless-stopped
+
+# Define the named volume at the root level
+volumes:
+  grader-data:
