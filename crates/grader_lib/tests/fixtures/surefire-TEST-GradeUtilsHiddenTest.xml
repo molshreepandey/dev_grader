@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="com.lamicons.assignment.GradeUtilsHiddenTest" time="1.204" tests="3" errors="1" skipped="1" failures="1">
+  <testcase name="handlesASingleElement" classname="com.lamicons.assignment.GradeUtilsHiddenTest$AverageAtScale" time="0.021"/>
+  <testcase name="everyIntegerScoreMapsToTheRightLetter" classname="com.lamicons.assignment.GradeUtilsHiddenTest$LetterGradeFullSweep" time="0.104">
+    <failure message="wrong letter for score 90 ==&gt; expected: &lt;A&gt; but was: &lt;B&gt;" type="org.opentest4j.AssertionFailedError"><![CDATA[org.opentest4j.AssertionFailedError: wrong letter for score 90
+	at com.lamicons.assignment.GradeUtilsHiddenTest.everyIntegerScoreMapsToTheRightLetter(GradeUtilsHiddenTest.java:88)]]></failure>
+  </testcase>
+  <testcase name="ranksTwoHundredThousandStudents" classname="com.lamicons.assignment.GradeUtilsHiddenTest$TopScorersAtScale" time="0.510">
+    <error type="java.lang.NullPointerException"><![CDATA[java.lang.NullPointerException: Cannot invoke "java.util.List.size()" because "students" is null]]></error>
+  </testcase>
+  <testcase name="rejectsANegativeN" classname="com.lamicons.assignment.GradeUtilsHiddenTest$TopScorersAtScale" time="0">
+    <skipped/>
+  </testcase>
+</testsuite>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="9" assertions="112" failures="1" skipped="0" time="0.287695826">
+  <testsuite name="tests/hidden/gradeUtils.hidden.test.js" file="tests/hidden/gradeUtils.hidden.test.js" tests="9" assertions="112" failures="1" skipped="0" time="0" hostname="virat">
+    <testsuite name="average — scale and edge cases" file="tests/hidden/gradeUtils.hidden.test.js" line="22" tests="3" assertions="4" failures="1" skipped="0" time="0.04" hostname="virat">
+      <testcase name="handles a single element" classname="average — scale and edge cases" time="0.000184" file="tests/hidden/gradeUtils.hidden.test.js" line="23" assertions="1" />
+      <testcase name="handles negative and fractional values" classname="average — scale and edge cases" time="0.024439" file="tests/hidden/gradeUtils.hidden.test.js" line="27" assertions="2">
+        <failure type="AssertionError" />
+      </testcase>
+      <testcase name="averages 200000 scores" classname="average — scale and edge cases" time="0.016834" file="tests/hidden/gradeUtils.hidden.test.js" line="32" assertions="1" />
+    </testsuite>
+    <testsuite name="letterGrade — full sweep" file="tests/hidden/gradeUtils.hidden.test.js" line="39" tests="2" assertions="103" failures="0" skipped="0" time="0.001" hostname="virat">
+      <testcase name="every integer score 0..100 maps to the right letter" classname="letterGrade — full sweep" time="0.001056" file="tests/hidden/gradeUtils.hidden.test.js" line="40" assertions="101" />
+      <testcase name="fractional scores just below a boundary do not round up" classname="letterGrade — full sweep" time="0.000091" file="tests/hidden/gradeUtils.hidden.test.js" line="48" assertions="2" />
+    </testsuite>
+    <testsuite name="topScorers — scale and ordering" file="tests/hidden/gradeUtils.hidden.test.js" line="54" tests="4" assertions="5" failures="0" skipped="0" time="0.207" hostname="virat">
+      <testcase name="returns an empty list when n is 0" classname="topScorers — scale and ordering" time="0.000687" file="tests/hidden/gradeUtils.hidden.test.js" line="55" assertions="1" />
+      <testcase name="returns everyone when n exceeds the roster size" classname="topScorers — scale and ordering" time="0.000124" file="tests/hidden/gradeUtils.hidden.test.js" line="59" assertions="1" />
+      <testcase name="does not mutate the caller&apos;s array" classname="topScorers — scale and ordering" time="0.000164" file="tests/hidden/gradeUtils.hidden.test.js" line="63" assertions="1" />
+      <testcase name="ranks 200000 students correctly, ties included" classname="topScorers — scale and ordering" time="0.207645" file="tests/hidden/gradeUtils.hidden.test.js" line="72" assertions="2" />
+    </testsuite>
+  </testsuite>
+</testsuites>

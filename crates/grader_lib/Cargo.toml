@@ -1,0 +1,17 @@
+[package]
+name = "grader_lib"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kafka_types.workspace = true
+libc.workspace = true
+nix.workspace = true
+quick-xml.workspace = true
+rdkafka.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+task_types.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
